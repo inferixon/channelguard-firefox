@@ -8,7 +8,10 @@
       * { box-sizing: border-box; }
       body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; padding: 24px; color: #171717; }
       .wrap { max-width: 1120px; margin: 0 auto; }
-      .top { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+      .top { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+      .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+      .brand-icon { width: 38px; height: 38px; flex: 0 0 38px; }
+      .brand-text { min-width: 0; }
       h1 { font-size: 20px; margin: 0; }
       h2 { font-size: 14px; margin: 0 0 10px; }
       h3 { font-size: 13px; margin: 14px 0 8px; }
@@ -50,9 +53,12 @@
   <body>
     <div class="wrap">
       <div class="top">
-        <div>
-          <h1>ChannelGuard</h1>
-          <div class="muted">Deny by default. Allow only whitelisted channel video playback.</div>
+        <div class="brand">
+          <img class="brand-icon" src="../assets/icon-48.png" alt="" />
+          <div class="brand-text">
+            <h1>ChannelGuard</h1>
+            <div class="muted">Deny by default. Allow only whitelisted channel video playback.</div>
+          </div>
         </div>
         <div class="muted">Version <span id="version">-</span></div>
       </div>
