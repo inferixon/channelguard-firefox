@@ -1,0 +1,12 @@
+dist/
+web-ext-artifacts/
+node_modules/
+.env
+.env.*
+*.xpi
+*.zip
+*.log
+*.tmp
+*.bak
+Thumbs.db
+.DS_Store

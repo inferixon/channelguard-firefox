@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ChannelGuard Options</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; padding: 24px; color: #171717; }
+      .wrap { max-width: 1120px; margin: 0 auto; }
+      .top { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+      h1 { font-size: 20px; margin: 0; }
+      h2 { font-size: 14px; margin: 0 0 10px; }
+      h3 { font-size: 13px; margin: 14px 0 8px; }
+      section { border: 1px solid #d7d7d7; border-radius: 8px; padding: 16px; margin: 14px 0; }
+      hr { border: 0; border-top: 1px solid #e4e4e4; margin: 16px 0; }
+      label { display: block; font-size: 12px; margin: 10px 0 6px; }
+      input, select { padding: 9px; border: 1px solid #bbb; border-radius: 6px; font-size: 14px; }
+      input[type="text"], input[type="password"] { width: 100%; }
+      input.pin-input { width: 14ch; max-width: 14ch; flex: 0 0 14ch; }
+      button { padding: 9px 12px; border-radius: 6px; font-size: 14px; cursor: pointer; }
+      .btn-work, button.pending { border: 1px solid #222; background: #222; color: #fff; opacity: 1; }
+      .btn-idle { border: 1px solid #222; background: #fff; color: #222; }
+      button:disabled { border-color: #cfcfcf; background: #f2f2f2; color: #777; cursor: not-allowed; opacity: 1; }
+      button.icon { width: 34px; height: 34px; padding: 0; font-size: 16px; line-height: 1; }
+      button.icon:hover:not(:disabled), button.icon:focus-visible { background: #ffecec; border-color: #b00020; color: #b00020; }
+      .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+      .row > input { flex: 1 1 320px; }
+      .msg { margin-top: 8px; font-size: 12px; color: #333; }
+      .err { color: #b00020; }
+      .muted { color: #666; font-size: 12px; }
+      table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      th, td { border-bottom: 1px solid #e6e6e6; padding: 8px; text-align: left; vertical-align: middle; font-size: 13px; }
+      th { font-size: 12px; color: #555; font-weight: 600; }
+      td.editable { cursor: text; }
+      td.editing { padding: 4px; }
+      .col-enabled { width: 74px; }
+      .col-mode { width: 148px; }
+      .col-until { width: 190px; }
+      .col-delete { width: 52px; text-align: right; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .log { max-height: 260px; overflow: auto; border: 1px solid #eee; border-radius: 6px; }
+      .log table { table-layout: auto; }
+      .section-toggle { display: inline-flex; gap: 8px; align-items: center; padding: 0; border: 0; background: transparent; color: #171717; font: inherit; cursor: pointer; }
+      .section-toggle .arrow { display: inline-block; width: 1em; transition: transform 120ms ease; }
+      .section-toggle[aria-expanded="true"] .arrow { transform: rotate(180deg); }
+      .hidden { display: none; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="top">
+        <div>
+          <h1>ChannelGuard</h1>
+          <div class="muted">Deny by default. Allow only whitelisted channel video playback.</div>
+        </div>
+        <div class="muted">Version <span id="version">-</span></div>
+      </div>
+
+      <section id="unlockSection">
+        <h2>Admin Unlock</h2>
+        <div class="row">
+          <input id="adminPin" class="pin-input" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN" maxlength="12" />
+          <button id="unlockOptions" class="btn-work">Unlock</button>
+        </div>
+        <div id="unlockMsg" class="msg"></div>
+      </section>
+
+      <div id="adminContent" class="hidden">
+      <section>
+        <h2>Whitelist</h2>
+        <div class="row">
+          <input id="addInput" type="text" autocomplete="off" placeholder="@handle | https://youtube.com/... | UC channel ID" />
+          <select id="addMode" title="Approval duration">
+            <option value="permanent">Forever</option>
+            <option value="day">1 day</option>
+          </select>
+          <button id="addChannel" class="btn-work">Add</button>
+          <button id="apply" class="btn-idle">Apply</button>
+        </div>
+        <div class="muted">Double-click channel name or key to edit. Disable with checkbox. Trash deletes row.</div>
+        <div style="overflow:auto; margin-top:10px;">
+          <table>
+            <thead>
+              <tr>
+                <th class="col-enabled">Enabled</th>
+                <th>Channel name</th>
+                <th>Channel key</th>
+                <th class="col-mode">Mode</th>
+                <th class="col-until">Expires</th>
+                <th class="col-delete"></th>
+              </tr>
+            </thead>
+            <tbody id="whitelistRows"></tbody>
+          </table>
+        </div>
+        <div id="wlMsg" class="msg"></div>
+      </section>
+
+      <section>
+        <h2>Settings</h2>
+        <h3>Policy Backup</h3>
+        <div class="row">
+          <button id="exportPolicy" class="btn-work">Export JSON</button>
+          <button id="importPolicy" class="btn-work">Import JSON</button>
+          <input id="importFile" class="hidden" type="file" accept="application/json,.json" />
+        </div>
+        <div class="muted">Export/import whitelist policy only. PIN hash and salt are not exported.</div>
+        <div id="backupMsg" class="msg"></div>
+        <hr />
+        <h3>PIN</h3>
+        <label for="newPin">Set new PIN (4-12 digits)</label>
+        <div class="row">
+          <input id="newPin" class="pin-input" type="password" inputmode="numeric" autocomplete="off" maxlength="12" />
+          <button id="savePin" class="btn-work">Save PIN</button>
+        </div>
+        <div id="pinMsg" class="msg"></div>
+        <div class="muted">Default PIN on first install: <b>0000</b></div>
+      </section>
+
+      <section>
+        <h2>
+          <button id="auditToggle" class="section-toggle" type="button" aria-expanded="false" aria-controls="auditBody">
+            <span class="arrow">⌄</span>
+            <span>Audit Log</span>
+          </button>
+        </h2>
+        <div id="auditBody" class="hidden">
+          <div class="row" style="margin-bottom:10px;">
+            <button id="refreshAudit" class="btn-work">Refresh</button>
+            <button id="clearAudit" class="btn-work">Clear</button>
+          </div>
+          <div class="log">
+            <table>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Action</th>
+                  <th>Reason</th>
+                  <th>Source</th>
+                  <th>Channel</th>
+                  <th>URL</th>
+                </tr>
+              </thead>
+              <tbody id="auditRows"></tbody>
+            </table>
+          </div>
+          <div id="auditMsg" class="msg"></div>
+        </div>
+      </section>
+      </div>
+    </div>
+
+    <script src="shared.js"></script>
+    <script src="options.js"></script>
+  </body>
+</html>

@@ -1,0 +1,59 @@
+{
+  "manifest_version": 2,
+  "name": "ChannelGuard",
+  "version": "1.0.0",
+  "description": "Allow YouTube videos only from parent-approved channels.",
+  "permissions": [
+    "storage",
+    "tabs",
+    "webNavigation",
+    "*://*.youtube.com/*",
+    "*://youtu.be/*",
+    "*://*.youtube-nocookie.com/*"
+  ],
+  "background": {
+    "scripts": ["src/shared.js", "src/background.js"],
+    "persistent": false
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.youtube.com/*",
+        "*://youtu.be/*",
+        "*://*.youtube-nocookie.com/*"
+      ],
+      "js": ["src/shared.js", "src/content_script.js"],
+      "all_frames": true,
+      "run_at": "document_start"
+    }
+  ],
+  "options_ui": {
+    "page": "src/options.html",
+    "open_in_tab": true
+  },
+  "browser_action": {
+    "default_title": "ChannelGuard",
+    "default_popup": "src/popup.html",
+    "default_icon": {
+      "48": "assets/icon-48.png",
+      "96": "assets/icon-96.png"
+    }
+  },
+  "icons": {
+    "48": "assets/icon-48.png",
+    "96": "assets/icon-96.png",
+    "128": "assets/icon-128.png"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "channelguard-youtube-whitelist@local-first.tools",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    },
+    "gecko_android": {
+      "strict_min_version": "142.0"
+    }
+  }
+}
