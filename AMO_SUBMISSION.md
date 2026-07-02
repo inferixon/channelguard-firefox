@@ -24,6 +24,9 @@ The extension is designed for simple household use: open a video or blocked page
 ChannelGuard does not use accounts, cloud sync, telemetry, analytics, or remote dashboards. Policy data stays in local Firefox extension storage.
 
 ChannelGuard is independent and is not affiliated with YouTube or Google.
+
+Help improve ChannelGuard or report issues here:
+https://github.com/inferixon/channelguard-firefox
 ```
 
 Categories:
@@ -107,11 +110,19 @@ The submitted package is plain WebExtension source with no build step, bundling,
 
 ## Screenshot Checklist
 
-- Blocked page with ChannelGuard actions.
-- Popup after PIN unlock on non-approved channel.
-- Popup on approved channel.
-- Options whitelist table.
-- Options settings with export/import and PIN controls.
+Prepared screenshots:
+
+```text
+A:\PROJECTS\DINOPOLICY\INBOX\ScreenShot-001.jpg
+A:\PROJECTS\DINOPOLICY\INBOX\ScreenShot-002.jpg
+A:\PROJECTS\DINOPOLICY\INBOX\ScreenShot-003.jpg
+```
+
+Coverage:
+
+- Blocked page / policy surface.
+- Popup or action surface.
+- Options management surface.
 
 ## Pre-Submission Checks
 
