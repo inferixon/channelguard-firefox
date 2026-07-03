@@ -1,8 +1,10 @@
 # ChannelGuard
 
-ChannelGuard is a local-first Firefox extension that allows YouTube videos only from parent-approved channels.
+ChannelGuard helps parents keep YouTube limited to trusted channels in Firefox.
 
-It is designed for household use: a parent unlocks with a PIN, approves a channel permanently or for one day, and manages the whitelist locally in Firefox.
+YouTube can quickly lead children from one safe video to unrelated recommendations, shorts, or channels that parents did not choose. ChannelGuard blocks YouTube video pages by default and lets a parent approve trusted channels with a PIN.
+
+It is designed for household use: a parent approves a channel permanently or for one day, and manages the whitelist in Firefox.
 
 ChannelGuard is independent and is not affiliated with YouTube or Google.
 

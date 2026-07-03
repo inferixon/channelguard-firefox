@@ -1,6 +1,6 @@
 # Privacy Policy
 
-ChannelGuard is a local-first browser extension.
+ChannelGuard is a Firefox extension that keeps its policy data on the user's device.
 
 ## Data Stored Locally
 

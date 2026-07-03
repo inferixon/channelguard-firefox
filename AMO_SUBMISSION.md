@@ -17,11 +17,13 @@ Allow YouTube videos only from parent-approved channels.
 Description:
 
 ```text
-ChannelGuard is a local-first YouTube channel whitelist for parents. It blocks YouTube video playback by default and allows videos only from channels approved with a parent PIN.
+YouTube can quickly lead children from one safe video to unrelated recommendations, shorts, or channels that parents did not choose. ChannelGuard helps parents keep YouTube limited to trusted channels in Firefox.
 
-The extension is designed for simple household use: open a video or blocked page, unlock with the PIN, and allow the channel permanently or for one day. Parents can manage the whitelist, export/import policy JSON, change the PIN, and review local audit entries from Options.
+By default, ChannelGuard blocks YouTube video pages. A parent unlocks with a PIN and approves a channel permanently or for one day from the toolbar popup or blocked page. Approved channels can play; other channels are redirected to a clear blocked page.
 
-ChannelGuard does not use accounts, cloud sync, telemetry, analytics, or remote dashboards. Policy data stays in local Firefox extension storage.
+Parents can manage the whitelist in Options, export/import policy JSON, change the PIN, and review a local audit log.
+
+ChannelGuard works on your device. It does not use accounts, cloud sync, telemetry, analytics, or remote dashboards. Whitelist, PIN, and audit data stay in Firefox extension storage.
 
 ChannelGuard is independent and is not affiliated with YouTube or Google.
 
@@ -38,7 +40,7 @@ Privacy & Security
 Tags:
 
 ```text
-parental control, youtube, whitelist, local-first, channel blocker
+content blocker, privacy, security, streaming, youtube
 ```
 
 Homepage:
@@ -123,6 +125,14 @@ Coverage:
 - Blocked page / policy surface.
 - Popup or action surface.
 - Options management surface.
+
+Captions:
+
+```text
+A blocked YouTube video shows the channel, reason, and PIN unlock prompt.
+After PIN unlock, parents can allow the channel permanently or for one day.
+Options lets parents manage the whitelist, backups, PIN, and local audit log.
+```
 
 ## Pre-Submission Checks
 
