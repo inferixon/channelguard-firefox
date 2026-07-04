@@ -48,6 +48,18 @@ It does not transmit browsing history, whitelist data, PIN data, analytics, tele
 
 See [PRIVACY.md](PRIVACY.md).
 
+## Storage Migrations
+
+ChannelGuard keeps user policy data in `browser.storage.local` under the `ytWhitelist.*` keys. Public updates must preserve existing whitelist, PIN hash, PIN salt, and audit data.
+
+The runtime migration point is `src/background.js -> migrateWhitelistStorageSnapshot()`. Any future storage-shape change must update that normalizer and add a fixture to `tests/storage_migration.test.js`.
+
+Run before every public release:
+
+```powershell
+node .\tests\storage_migration.test.js
+```
+
 ## Firefox Enterprise Policies
 
 For child devices, Firefox Enterprise Policies can help lock the extension and restrict browser settings. This is optional and environment-specific.
@@ -82,6 +94,7 @@ Get-ChildItem -LiteralPath (Join-Path $root 'src') -Filter *.js -File | ForEach-
   node --check $_.FullName
   if ($LASTEXITCODE -ne 0) { throw "node --check failed: $($_.FullName)" }
 }
+node (Join-Path $root 'tests\storage_migration.test.js')
 $env:npm_config_strict_ssl='false'
 npx --yes web-ext lint --source-dir $root --self-hosted
 ```

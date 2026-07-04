@@ -1,8 +1,14 @@
 # Changelog
 
+## 1.0.1 - 2026-07-05
+
+- Added runtime whitelist storage migration and normalization for older storage shapes.
+- Added migration coverage for legacy arrays, wrapper objects, map-style storage, malformed storage, and latest-schema idempotence.
+- Documented the storage migration release gate in README, AMO submission notes, and local release/development skills.
+
 ## 1.0.0 - 2026-07-03
 
-- Prepared the public ChannelGuard Firefox add-on source package.
+- Released ChannelGuard as a public Firefox add-on.
 
 ## 0.1.4 - 2026-07-02
 

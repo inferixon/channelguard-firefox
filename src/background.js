@@ -52,15 +52,24 @@ function normalizeWhitelistEntry(input) {
   const key = parseChannelKey(input.key || input.channelKey || input.value || "");
   if (!isStableChannelKey(key)) return null;
 
-  const expiresAt = input.expiresAt ? String(input.expiresAt) : null;
+  const expiresAt = normalizeOptionalIso(input.expiresAt || input.expires_at || null);
+  const createdAt = normalizeOptionalIso(input.createdAt || input.created_at || input.addedAt || null) || nowIso();
+  const updatedAt = normalizeOptionalIso(input.updatedAt || input.updated_at || input.modifiedAt || null) || createdAt;
   return {
     key,
     name: normalizeWhitespace(input.name || input.channelName || displayNameFromKey(key)),
     enabled: input.enabled !== false,
     expiresAt,
-    createdAt: input.createdAt || nowIso(),
-    updatedAt: nowIso()
+    createdAt,
+    updatedAt
   };
+}
+
+function normalizeOptionalIso(value) {
+  if (!value) return null;
+  const timestamp = Date.parse(String(value));
+  if (!Number.isFinite(timestamp)) return null;
+  return new Date(timestamp).toISOString();
 }
 
 function isStableChannelKey(key) {
@@ -77,6 +86,58 @@ function dedupeEntries(entries) {
     map.set(entry.key, previous ? { ...previous, ...entry, createdAt: previous.createdAt || entry.createdAt } : entry);
   }
   return [...map.values()].sort((a, b) => String(a.name || a.key).localeCompare(String(b.name || b.key)));
+}
+
+function extractStoredChannelItems(value) {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== "object") return null;
+  if (Array.isArray(value.channels)) return value.channels;
+  if (Array.isArray(value.entries)) return value.entries;
+
+  const items = [];
+  for (const [rawKey, rawValue] of Object.entries(value)) {
+    if (rawValue === false || rawValue == null) continue;
+    if (rawValue === true || typeof rawValue === "string") {
+      items.push({ key: rawKey, name: typeof rawValue === "string" ? rawValue : displayNameFromKey(rawKey) });
+    } else if (typeof rawValue === "object") {
+      items.push({ key: rawKey, ...rawValue });
+    }
+  }
+  return items.length ? items : null;
+}
+
+function storageVersionFrom(value) {
+  const version = Number(value);
+  return Number.isInteger(version) && version >= 0 ? version : 0;
+}
+
+function migrateWhitelistStorageSnapshot(snapshot) {
+  const source = snapshot && typeof snapshot === "object" ? snapshot : {};
+  const originalVersion = storageVersionFrom(source[SCHEMA_VERSION_KEY]);
+  const rawChannels = source[STORAGE_KEY];
+  const extracted = extractStoredChannelItems(rawChannels);
+  const hadStoredChannels = extracted !== null;
+
+  let entries = [];
+  if (extracted) {
+    if (originalVersion === 0 && arraysEqualAsSets(extracted, LEGACY_DEFAULT_WHITELIST)) {
+      entries = [];
+    } else {
+      entries = dedupeEntries(extracted);
+    }
+  }
+
+  const changed =
+    originalVersion !== SCHEMA_VERSION ||
+    JSON.stringify(rawChannels) !== JSON.stringify(entries);
+
+  return {
+    entries,
+    changed,
+    hadStoredChannels,
+    originalVersion,
+    schemaVersion: SCHEMA_VERSION
+  };
 }
 
 function isEntryActive(entry) {
@@ -186,33 +247,14 @@ async function getWhitelistEntries() {
   if (Array.isArray(whitelistCache)) return whitelistCache;
 
   const result = await webext.storageGet([STORAGE_KEY, SCHEMA_VERSION_KEY]);
-  const channels = result[STORAGE_KEY];
+  const migration = migrateWhitelistStorageSnapshot(result);
 
-  // One-time migration: if the user never changed the initial legacy defaults,
-  // clear them (new policy: empty defaults).
-  if (!result[SCHEMA_VERSION_KEY] && Array.isArray(channels)) {
-    if (arraysEqualAsSets(channels, LEGACY_DEFAULT_WHITELIST)) {
-      await webext.storageSet({ [STORAGE_KEY]: [], [SCHEMA_VERSION_KEY]: SCHEMA_VERSION });
-      whitelistCache = [];
-      return [];
+  if (migration.hadStoredChannels) {
+    if (migration.changed) {
+      await webext.storageSet({ [STORAGE_KEY]: migration.entries, [SCHEMA_VERSION_KEY]: SCHEMA_VERSION });
     }
-    const entries = dedupeEntries(channels);
-    await webext.storageSet({ [STORAGE_KEY]: entries, [SCHEMA_VERSION_KEY]: SCHEMA_VERSION });
-    whitelistCache = entries;
-    return entries;
-  }
-
-  if (Array.isArray(channels)) {
-    const entries = dedupeEntries(channels);
-    const needsMigration =
-      result[SCHEMA_VERSION_KEY] !== SCHEMA_VERSION ||
-      channels.length !== entries.length ||
-      channels.some((x, i) => JSON.stringify(normalizeWhitelistEntry(x)) !== JSON.stringify(entries[i]));
-    if (needsMigration) {
-      await webext.storageSet({ [STORAGE_KEY]: entries, [SCHEMA_VERSION_KEY]: SCHEMA_VERSION });
-    }
-    whitelistCache = entries;
-    return entries;
+    whitelistCache = migration.entries;
+    return migration.entries;
   }
 
   const defaults = await loadDefaultWhitelist();
@@ -228,14 +270,12 @@ async function getWhitelist() {
 }
 
 async function normalizeStoredWhitelistIfNeeded() {
-  const result = await webext.storageGet([STORAGE_KEY]);
-  const channels = result[STORAGE_KEY];
-  if (!Array.isArray(channels)) return;
-  const normalized = dedupeEntries(channels);
-  const changed = JSON.stringify(channels) !== JSON.stringify(normalized);
-  if (changed) {
-    await webext.storageSet({ [STORAGE_KEY]: normalized, [SCHEMA_VERSION_KEY]: SCHEMA_VERSION });
-    whitelistCache = normalized;
+  const result = await webext.storageGet([STORAGE_KEY, SCHEMA_VERSION_KEY]);
+  const migration = migrateWhitelistStorageSnapshot(result);
+  if (!migration.hadStoredChannels) return;
+  if (migration.changed) {
+    await webext.storageSet({ [STORAGE_KEY]: migration.entries, [SCHEMA_VERSION_KEY]: SCHEMA_VERSION });
+    whitelistCache = migration.entries;
   }
 }
 

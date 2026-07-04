@@ -138,5 +138,6 @@ Options lets parents manage the whitelist, backups, PIN, and local audit log.
 
 - JSON parse passes.
 - JS syntax check passes.
+- Storage migration test passes: `node tests/storage_migration.test.js`.
 - `web-ext lint` passes with no errors or warnings.
 - Manual Firefox QA passes for blocking, approval, popup states, Options, and export/import.
