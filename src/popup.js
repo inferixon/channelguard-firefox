@@ -26,6 +26,15 @@ function showPopup() {
   document.documentElement.classList.remove("booting");
 }
 
+async function refreshDefaultPinHint() {
+  try {
+    const resp = await webext.runtimeSendMessage({ type: "pin.default.get" });
+    document.getElementById("defaultPinHint")?.classList.toggle("hidden", !(resp?.ok && resp.defaultPinActive));
+  } catch {
+    document.getElementById("defaultPinHint")?.classList.add("hidden");
+  }
+}
+
 function focusPin() {
   const pinInput = document.getElementById("pin");
   if (!(pinInput instanceof HTMLInputElement)) return;
@@ -56,6 +65,7 @@ async function unlock() {
     const resp = await webext.runtimeSendMessage({ type: "pin.verify", pin });
     if (!resp?.ok) throw new Error(resp?.error || "invalid pin");
     unlockedPin = pin;
+    await refreshDefaultPinHint();
     showActions();
     await refreshActionState();
   } catch (e) {
@@ -334,6 +344,7 @@ async function init() {
     return;
   }
   showPin();
+  await refreshDefaultPinHint();
   showPopup();
 }
 

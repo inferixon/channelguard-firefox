@@ -24,6 +24,7 @@
       .msg { margin-top: 10px; font-size: 12px; color: #333; }
       .err { color: #b00020; }
       .muted { color: #666; }
+      .hint { margin-top: 8px; font-size: 12px; color: #555; line-height: 1.35; }
       .hidden { display: none; }
     </style>
   </head>
@@ -33,6 +34,7 @@
     <div id="stepPin">
       <label for="pin">PIN</label>
       <input id="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN" />
+      <div id="defaultPinHint" class="hint hidden">Use PIN 0000, then change it in Options.</div>
       <button id="unlock" class="btn-work">Unlock</button>
     </div>
 

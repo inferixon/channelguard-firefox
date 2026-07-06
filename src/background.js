@@ -7,6 +7,7 @@ const SCHEMA_VERSION_KEY = "ytWhitelist.schemaVersion";
 const PIN_SALT_KEY = "ytWhitelist.pinSalt";
 const PIN_HASH_KEY = "ytWhitelist.pinHash";
 const AUDIT_LOG_KEY = "ytWhitelist.auditLog";
+const ADMIN_SESSION_UNTIL_KEY = "ytWhitelist.adminSessionUntil";
 const DEFAULTS_URL = "data/default_whitelist.json";
 let whitelistCache = null;
 let enforcementInFlight = new Map();
@@ -15,7 +16,11 @@ const SCHEMA_VERSION = 2;
 const AUDIT_LIMIT = 200;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const ADMIN_SESSION_MS = 5 * 60 * 1000;
+const PIN_MAX_FAILED_ATTEMPTS = 3;
+const PIN_LOCKOUT_MS = 120 * 1000;
 let adminSessionUntil = 0;
+let pinFailedAttempts = 0;
+let pinLockedUntil = 0;
 
 const LEGACY_DEFAULT_WHITELIST = [
   "handle:@YouTube",
@@ -216,11 +221,61 @@ async function verifyPin(pin) {
   return actualHash === expectedHash;
 }
 
-async function requireMessagePin(message) {
-  if (adminSessionUntil > Date.now()) return;
-  const pin = message?.currentPin || message?.adminPin || message?.pin || "";
+function pinLockoutError() {
+  const remainingSeconds = Math.max(1, Math.ceil((pinLockedUntil - Date.now()) / 1000));
+  return new Error(`Too many failed PIN attempts. Try again in ${remainingSeconds} seconds.`);
+}
+
+async function verifyPinWithLockout(pin) {
+  if (pinLockedUntil > Date.now()) {
+    throw pinLockoutError();
+  }
+
   const ok = await verifyPin(pin);
-  if (ok) adminSessionUntil = Date.now() + ADMIN_SESSION_MS;
+  if (ok) {
+    pinFailedAttempts = 0;
+    pinLockedUntil = 0;
+    return true;
+  }
+
+  pinFailedAttempts += 1;
+  if (pinFailedAttempts >= PIN_MAX_FAILED_ATTEMPTS) {
+    pinFailedAttempts = 0;
+    pinLockedUntil = Date.now() + PIN_LOCKOUT_MS;
+    throw pinLockoutError();
+  }
+
+  return false;
+}
+
+async function isDefaultPinActive() {
+  await ensurePinInitialized();
+  const result = await webext.storageGet([PIN_SALT_KEY, PIN_HASH_KEY]);
+  const salt = result[PIN_SALT_KEY];
+  const expectedHash = result[PIN_HASH_KEY];
+  if (!salt || !expectedHash) return false;
+  return await sha256Hex(`${salt}:0000`) === expectedHash;
+}
+
+async function getAdminSessionUntil() {
+  if (adminSessionUntil > Date.now()) return adminSessionUntil;
+  const result = await webext.storageGet([ADMIN_SESSION_UNTIL_KEY]);
+  const until = Number(result[ADMIN_SESSION_UNTIL_KEY] || 0);
+  adminSessionUntil = Number.isFinite(until) ? until : 0;
+  return adminSessionUntil;
+}
+
+async function setAdminSession() {
+  adminSessionUntil = Date.now() + ADMIN_SESSION_MS;
+  await webext.storageSet({ [ADMIN_SESSION_UNTIL_KEY]: adminSessionUntil });
+  return adminSessionUntil;
+}
+
+async function requireMessagePin(message) {
+  if (await getAdminSessionUntil() > Date.now()) return;
+  const pin = message?.currentPin || message?.adminPin || message?.pin || "";
+  const ok = await verifyPinWithLockout(pin);
+  if (ok) await setAdminSession();
   if (!ok) throw new Error("invalid pin");
 }
 
@@ -355,6 +410,18 @@ function toYouTubeWatchUrl(urlString) {
   return url.toString();
 }
 
+function toYouTubeChannelUrlFromStableKey(key) {
+  const normalized = parseChannelKey(key || "");
+  if (normalized.startsWith("handle:")) {
+    const handle = normalized.slice("handle:".length);
+    return `https://www.youtube.com/${handle}`;
+  }
+  if (normalized.startsWith("channelId:")) {
+    return `https://www.youtube.com/channel/${normalized.slice("channelId:".length)}`;
+  }
+  return "";
+}
+
 async function resolveHandleFromInput(input) {
   const raw = String(input || "").trim();
   if (!raw) return "";
@@ -451,10 +518,6 @@ async function resolveChannelFromInput(input) {
   const raw = String(input || "").trim();
   const fallbackKey = parseChannelKey(raw);
   if (!raw) return { key: "", name: "" };
-  if (raw.startsWith("@") || raw.startsWith("handle:") || raw.startsWith("name:")) {
-    const key = parseChannelKey(raw);
-    return { key, name: displayNameFromKey(key) };
-  }
 
   let urlToFetch = "";
   try {
@@ -465,12 +528,10 @@ async function resolveChannelFromInput(input) {
       /(^|\.)youtube-nocookie\.com$/.test(url.hostname);
     if (hostOk) urlToFetch = toYouTubeWatchUrl(url.toString());
   } catch {
-    if (fallbackKey.startsWith("channelId:")) {
-      urlToFetch = `https://www.youtube.com/channel/${fallbackKey.slice("channelId:".length)}`;
-    }
+    urlToFetch = toYouTubeChannelUrlFromStableKey(fallbackKey);
   }
 
-  if (!urlToFetch) return { key: fallbackKey, name: displayNameFromKey(fallbackKey) };
+  if (!urlToFetch) return { key: "", name: "" };
 
   try {
     const oembedUrl = `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(urlToFetch)}`;
@@ -487,12 +548,13 @@ async function resolveChannelFromInput(input) {
   }
 
   const resp = await fetch(urlToFetch, { credentials: "omit", redirect: "follow" });
-  if (!resp.ok) return { key: fallbackKey, name: displayNameFromKey(fallbackKey) };
+  if (!resp.ok) return { key: "", name: "" };
   const html = await resp.text();
   const handle = handleFromHtml(html);
   const cid = channelIdFromHtml(html);
-  const key = handle ? parseChannelKey(handle) : (cid ? parseChannelKey(`channelId:${cid}`) : fallbackKey);
+  const key = handle ? parseChannelKey(handle) : (cid ? parseChannelKey(`channelId:${cid}`) : "");
   const name = channelNameFromHtml(html);
+  if (!isStableChannelKey(key)) return { key: "", name: "" };
   return { key, name: name || displayNameFromKey(key) };
 }
 
@@ -714,24 +776,31 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message.type === "pin.set") {
       await requireMessagePin(message);
       await setPin(message.newPin);
-      adminSessionUntil = Date.now() + ADMIN_SESSION_MS;
+      await setAdminSession();
       sendResponse({ ok: true });
       return;
     }
 
     if (message.type === "pin.verify") {
-      const ok = await verifyPin(message.pin);
+      const ok = await verifyPinWithLockout(message.pin);
       if (!ok) {
         sendResponse({ ok: false, error: "invalid pin" });
         return;
       }
-      adminSessionUntil = Date.now() + ADMIN_SESSION_MS;
+      await setAdminSession();
       sendResponse({ ok: true });
       return;
     }
 
+    if (message.type === "pin.default.get") {
+      const defaultPinActive = await isDefaultPinActive();
+      sendResponse({ ok: true, defaultPinActive });
+      return;
+    }
+
     if (message.type === "admin.session.get") {
-      sendResponse({ ok: true, unlocked: adminSessionUntil > Date.now(), until: adminSessionUntil });
+      const until = await getAdminSessionUntil();
+      sendResponse({ ok: true, unlocked: until > Date.now(), until });
       return;
     }
 
@@ -778,7 +847,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     }
 
     if (message.type === "approve.channel") {
-      const ok = await verifyPin(message.pin);
+      const ok = await verifyPinWithLockout(message.pin);
       if (!ok) {
         sendResponse({ ok: false, error: "invalid pin" });
         return;

@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "ChannelGuard",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Allow YouTube videos only from parent-approved channels.",
   "permissions": [
     "storage",
@@ -47,13 +47,10 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "channelguard-youtube-whitelist@local-first.tools",
-      "strict_min_version": "140.0",
+      "strict_min_version": "142.0",
       "data_collection_permissions": {
         "required": ["none"]
       }
-    },
-    "gecko_android": {
-      "strict_min_version": "142.0"
     }
   }
 }

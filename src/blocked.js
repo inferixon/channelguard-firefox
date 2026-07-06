@@ -21,6 +21,15 @@ function setMsg(text, isError) {
   el.className = isError ? "msg err" : "msg";
 }
 
+async function refreshDefaultPinHint() {
+  try {
+    const resp = await webext.runtimeSendMessage({ type: "pin.default.get" });
+    document.getElementById("defaultPinHint")?.classList.toggle("hidden", !(resp?.ok && resp.defaultPinActive));
+  } catch {
+    document.getElementById("defaultPinHint")?.classList.add("hidden");
+  }
+}
+
 function returnToOriginalUrl() {
   if (originalUrl && isYouTubeVideoUrl(originalUrl)) {
     window.location.replace(originalUrl);
@@ -119,6 +128,7 @@ async function unlock() {
     return;
   }
   unlockedPin = pin;
+  await refreshDefaultPinHint();
   document.getElementById("pinBox")?.classList.add("hidden");
   document.getElementById("actions")?.classList.remove("hidden");
   setMsg("");
@@ -222,3 +232,4 @@ document.getElementById("openOptions")?.addEventListener("click", () => chrome.r
 renderDetails();
 renderActions();
 void enrichChannel();
+void refreshDefaultPinHint();

@@ -14,9 +14,11 @@ ChannelGuard stores the following data in Firefox extension storage on the user'
 
 ## Data Transmission
 
-ChannelGuard does not transmit browsing history, whitelist data, PIN data, analytics, telemetry, or personal data to the developer or any third-party server.
+ChannelGuard does not send data to the developer and does not use telemetry, analytics, accounts, cloud sync, tracking, or remote policy services.
 
-The extension does not use accounts, cloud sync, a remote dashboard, analytics, or tracking.
+To resolve the channel for the YouTube page being evaluated, ChannelGuard may request YouTube oEmbed, channel, or video pages. This data is sent only to YouTube/Google as part of enforcing the local policy.
+
+Whitelist, PIN verification data, and audit logs remain in Firefox extension storage on the user's device.
 
 ## Export And Import
 

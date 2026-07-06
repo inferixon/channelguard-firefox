@@ -1,10 +1,12 @@
 # ChannelGuard
 
-ChannelGuard helps parents keep YouTube limited to trusted channels in Firefox.
+ChannelGuard helps parents keep YouTube limited to trusted channels in desktop Firefox.
 
-YouTube can quickly lead children from one safe video to unrelated recommendations, shorts, or channels that parents did not choose. ChannelGuard blocks YouTube video pages by default and lets a parent approve trusted channels with a PIN.
+YouTube can quickly lead children from one safe video to unrelated recommendations, shorts, or channels that parents did not choose. ChannelGuard blocks YouTube video pages by default in desktop Firefox and lets a parent approve trusted channels with a PIN.
 
 It is designed for household use: a parent approves a channel permanently or for one day, and manages the whitelist in Firefox.
+
+Current support target: desktop Firefox 142 or newer.
 
 ChannelGuard is independent and is not affiliated with YouTube or Google.
 
@@ -37,6 +39,7 @@ Change it in Options after testing begins.
 
 - Open a YouTube video or channel page.
 - Click the ChannelGuard toolbar button and enter the PIN.
+- Use default PIN `0000` on first install, then change it in Options.
 - Approve the channel forever or for one day.
 - Manage channels, backup JSON, PIN, and audit entries from Options.
 
@@ -44,9 +47,19 @@ Change it in Options after testing begins.
 
 ChannelGuard stores whitelist entries, PIN verification data, and local audit entries only in Firefox extension storage on the user's device.
 
-It does not transmit browsing history, whitelist data, PIN data, analytics, telemetry, or personal data to the developer or any third-party server.
+It does not send data to the developer and does not use telemetry, analytics, accounts, cloud sync, tracking, or remote policy services.
+
+To resolve the channel for the YouTube page being evaluated, ChannelGuard may request YouTube oEmbed, channel, or video pages. This data is sent only to YouTube/Google as part of enforcing the local policy.
 
 See [PRIVACY.md](PRIVACY.md).
+
+## Limitations
+
+ChannelGuard is a browser-level household tool. It is not a device-level parental-control system.
+
+A user who can disable extensions, use another browser or Firefox profile, change Firefox settings, or modify local profile data can bypass it.
+
+For child devices, use Firefox Enterprise Policies or OS-level parental controls.
 
 ## Storage Migrations
 
@@ -87,16 +100,26 @@ Adjust policies to your Firefox version and deployment model.
 
 ## Development Checks
 
+Run for local development and home testing:
+
 ```powershell
 $root = Get-Location
 Get-Content -LiteralPath (Join-Path $root 'manifest.json') -Raw | ConvertFrom-Json | Out-Null
+Get-Content -LiteralPath (Join-Path $root 'data\default_whitelist.json') -Raw | ConvertFrom-Json | Out-Null
 Get-ChildItem -LiteralPath (Join-Path $root 'src') -Filter *.js -File | ForEach-Object {
   node --check $_.FullName
   if ($LASTEXITCODE -ne 0) { throw "node --check failed: $($_.FullName)" }
 }
 node (Join-Path $root 'tests\storage_migration.test.js')
 $env:npm_config_strict_ssl='false'
-npx --yes web-ext lint --source-dir $root --self-hosted
+npx --yes web-ext lint --source-dir $root
+```
+
+Run before an AMO upload:
+
+```powershell
+$root = Get-Location
+npx --yes web-ext lint --source-dir $root --warnings-as-errors
 ```
 
 ## License

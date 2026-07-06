@@ -5,9 +5,12 @@
 let lastHref = "";
 let pendingTimer = null;
 let lastCheckSignature = "";
+let lastMiniPlayerSignature = "";
 let retryAttempts = 0;
 let retryExpectedVideoId = "";
 let retryObserver = null;
+let miniPlayerTimer = null;
+let miniPlayerObserver = null;
 
 const RETRY_MAX_ATTEMPTS = 12;
 const RETRY_BASE_DELAY_MS = 140;
@@ -18,6 +21,13 @@ async function sendCheck(url, channelKey, channelName) {
   if (signature === lastCheckSignature) return null;
   lastCheckSignature = signature;
   return webext.runtimeSendMessage({ type: "youtube.check", url, channelKey, channelName, source: "content-script" });
+}
+
+async function sendMiniPlayerCheck(url) {
+  const signature = String(url || "");
+  if (!signature || signature === lastMiniPlayerSignature) return null;
+  lastMiniPlayerSignature = signature;
+  return webext.runtimeSendMessage({ type: "youtube.check", url, channelKey: "", channelName: "", source: "content-script-miniplayer" });
 }
 
 function clearPendingRetryTimer() {
@@ -84,6 +94,20 @@ function videoIdFromUrl(urlString) {
   }
 }
 
+function watchUrlFromVideoId(videoId) {
+  const id = String(videoId || "").trim();
+  if (!id) return "";
+  return `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
+}
+
+function isElementVisible(el) {
+  if (!el || !el.getBoundingClientRect) return false;
+  const style = window.getComputedStyle ? window.getComputedStyle(el) : null;
+  if (style && (style.display === "none" || style.visibility === "hidden" || style.opacity === "0")) return false;
+  const rect = el.getBoundingClientRect();
+  return rect.width > 20 && rect.height > 20;
+}
+
 function renderedVideoId() {
   // Watch pages
   const watch = document.querySelector("ytd-watch-flexy[video-id]");
@@ -106,6 +130,52 @@ function renderedVideoId() {
   }
 
   return "";
+}
+
+function miniplayerRoot() {
+  const root = document.querySelector("ytd-miniplayer");
+  if (!root || !isElementVisible(root)) return null;
+  return root;
+}
+
+function videoUrlFromMiniplayer(root) {
+  if (!root) return "";
+
+  const directVideoId = root.getAttribute?.("video-id") || root.getAttribute?.("data-video-id") || "";
+  if (directVideoId) return watchUrlFromVideoId(directVideoId);
+
+  const withVideoId = root.querySelector?.("[video-id], [data-video-id]");
+  const nestedVideoId = withVideoId?.getAttribute?.("video-id") || withVideoId?.getAttribute?.("data-video-id") || "";
+  if (nestedVideoId) return watchUrlFromVideoId(nestedVideoId);
+
+  const links = root.querySelectorAll?.("a[href]") || [];
+  for (const link of links) {
+    const href = link.getAttribute("href") || "";
+    if (!href) continue;
+    try {
+      const url = new URL(href, window.location.origin);
+      if (isYouTubeVideoUrl(url.toString())) return url.toString();
+    } catch {
+      // Ignore malformed internal links.
+    }
+  }
+
+  return "";
+}
+
+function suppressMiniplayer(root) {
+  if (!root) return;
+  const videos = root.querySelectorAll?.("video") || [];
+  for (const video of videos) {
+    try {
+      video.pause();
+      video.currentTime = 0;
+    } catch {
+      // Best effort only.
+    }
+  }
+  root.setAttribute("data-channelguard-blocked", "true");
+  root.style.display = "none";
 }
 
 function findChannelAnchor() {
@@ -194,6 +264,31 @@ async function checkNow({ allowRetry, expectedVideoId }) {
   if (resp?.redirectUrl) window.location.replace(String(resp.redirectUrl));
 }
 
+async function checkMiniPlayerNow() {
+  const root = miniplayerRoot();
+  if (!root) return;
+
+  const url = videoUrlFromMiniplayer(root);
+  if (!url) {
+    suppressMiniplayer(root);
+    return;
+  }
+
+  const resp = await sendMiniPlayerCheck(url);
+  if (resp?.redirectUrl) {
+    suppressMiniplayer(root);
+    window.location.replace(String(resp.redirectUrl));
+  }
+}
+
+function scheduleMiniPlayerCheck() {
+  if (miniPlayerTimer) return;
+  miniPlayerTimer = window.setTimeout(() => {
+    miniPlayerTimer = null;
+    void checkMiniPlayerNow();
+  }, 80);
+}
+
 function scheduleRetry({ expectedVideoId }) {
   if (pendingTimer) return;
 
@@ -220,9 +315,28 @@ function onUrlChange() {
   if (href === lastHref) return;
   lastHref = href;
   lastCheckSignature = "";
+  lastMiniPlayerSignature = "";
   stopRetry();
   const expectedVideoId = videoIdFromUrl(href);
   void checkNow({ allowRetry: true, expectedVideoId });
+  scheduleMiniPlayerCheck();
+}
+
+function ensureMiniPlayerObserver() {
+  if (miniPlayerObserver || !window.MutationObserver) return;
+  const root = document.documentElement;
+  if (!root) return;
+
+  miniPlayerObserver = new MutationObserver(() => {
+    scheduleMiniPlayerCheck();
+  });
+
+  miniPlayerObserver.observe(root, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["href", "video-id", "data-video-id", "hidden", "style", "class"]
+  });
 }
 
 // YouTube is an SPA; listen to navigation events.
@@ -230,7 +344,9 @@ window.addEventListener("yt-navigate-finish", onUrlChange, true);
 window.addEventListener("popstate", onUrlChange, true);
 window.addEventListener("hashchange", onUrlChange, true);
 
-// SPA fallback for pages that navigate via history API without events.
+// Best-effort SPA fallback for pages that navigate via history API without
+// events. In Firefox, content scripts run in an isolated world, so background
+// webNavigation listeners remain the primary SPA enforcement path.
 const originalPushState = history.pushState;
 history.pushState = function pushStatePatched(...args) {
   const result = originalPushState.apply(this, args);
@@ -254,4 +370,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 });
 
 // Initial check.
+ensureMiniPlayerObserver();
 onUrlChange();
+scheduleMiniPlayerCheck();

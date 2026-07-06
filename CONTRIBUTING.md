@@ -34,7 +34,14 @@ Get-ChildItem -LiteralPath (Join-Path $root 'src') -Filter *.js -File | ForEach-
   if ($LASTEXITCODE -ne 0) { throw "node --check failed: $($_.FullName)" }
 }
 $env:npm_config_strict_ssl='false'
-npx --yes web-ext lint --source-dir $root --self-hosted
+npx --yes web-ext lint --source-dir $root
+```
+
+Before an AMO upload, run AMO lint mode:
+
+```powershell
+$root = Get-Location
+npx --yes web-ext lint --source-dir $root --warnings-as-errors
 ```
 
 Manual QA should cover:

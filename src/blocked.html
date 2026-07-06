@@ -18,6 +18,7 @@
       textarea { width: 100%; min-height: 110px; margin-top: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; }
       .row { margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
       .muted { color: #666; font-size: 13px; }
+      .hint { flex: 1 1 100%; margin-top: -4px; color: #555; font-size: 13px; }
       .msg { margin-top: 10px; font-size: 13px; color: #333; }
       .err { color: #b00020; }
       .hidden { display: none; }
@@ -32,6 +33,7 @@
       <div id="pinBox" class="row">
         <input id="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN" />
         <button id="unlock" class="btn-work">Unlock actions</button>
+        <div id="defaultPinHint" class="hint hidden">Use PIN 0000, then change it in Options.</div>
       </div>
 
       <div id="actions" class="row hidden">

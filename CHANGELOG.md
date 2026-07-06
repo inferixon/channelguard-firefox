@@ -1,10 +1,12 @@
 # Changelog
 
-## 1.0.1 - 2026-07-05
+## 1.0.1 - 2026-07-06
 
 - Added runtime whitelist storage migration and normalization for older storage shapes.
 - Added migration coverage for legacy arrays, wrapper objects, map-style storage, malformed storage, and latest-schema idempotence.
-- Documented the storage migration release gate in README, AMO submission notes, and local release/development skills.
+- Added a 120-second PIN lockout after 3 failed attempts.
+- Added admin "Session expired" lockout after 5 minutes.
+- Small bugfixes for Options, popup, and blocked-page admin actions.
 
 ## 1.0.0 - 2026-07-03
 

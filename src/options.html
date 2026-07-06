@@ -32,6 +32,8 @@
       .msg { margin-top: 8px; font-size: 12px; color: #333; }
       .err { color: #b00020; }
       .muted { color: #666; font-size: 12px; }
+      .hint { margin: 10px 0 12px; }
+      .table-wrap { overflow: auto; margin-top: 0; }
       table { width: 100%; border-collapse: collapse; table-layout: fixed; }
       th, td { border-bottom: 1px solid #e6e6e6; padding: 8px; text-align: left; vertical-align: middle; font-size: 13px; }
       th { font-size: 12px; color: #555; font-weight: 600; }
@@ -84,8 +86,8 @@
           <button id="addChannel" class="btn-work">Add</button>
           <button id="apply" class="btn-idle">Apply</button>
         </div>
-        <div class="muted">Double-click channel name or key to edit. Disable with checkbox. Trash deletes row.</div>
-        <div style="overflow:auto; margin-top:10px;">
+        <div class="muted hint">Double-click channel name or key to edit. Disable with checkbox. Trash deletes row.</div>
+        <div class="table-wrap">
           <table>
             <thead>
               <tr>
@@ -111,7 +113,7 @@
           <button id="importPolicy" class="btn-work">Import JSON</button>
           <input id="importFile" class="hidden" type="file" accept="application/json,.json" />
         </div>
-        <div class="muted">Export/import whitelist policy only. PIN hash and salt are not exported.</div>
+        <div class="muted hint">Export/import whitelist policy only. PIN hash and salt are not exported.</div>
         <div id="backupMsg" class="msg"></div>
         <hr />
         <h3>PIN</h3>
@@ -121,7 +123,7 @@
           <button id="savePin" class="btn-work">Save PIN</button>
         </div>
         <div id="pinMsg" class="msg"></div>
-        <div class="muted">Default PIN on first install: <b>0000</b></div>
+        <div class="muted hint">Default PIN on first install: <b>0000</b></div>
       </section>
 
       <section>

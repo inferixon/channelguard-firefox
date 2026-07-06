@@ -5,7 +5,9 @@
 let entries = [];
 let savedSnapshot = "";
 let adminPin = "";
-const SESSION_EXPIRED_MSG = "Session expired. Enter PIN again.";
+let stateReloadInFlight = null;
+let lastStateReloadAt = 0;
+const STATE_RELOAD_DEBOUNCE_MS = 400;
 
 function setMsg(id, text, isError) {
   const el = document.getElementById(id);
@@ -23,11 +25,22 @@ function lockOptions(message) {
   document.getElementById("adminContent")?.classList.add("hidden");
   document.getElementById("unlockSection")?.classList.remove("hidden");
   setMsg("unlockMsg", message || "", Boolean(message));
+  setMsg("wlMsg", "");
+  setMsg("backupMsg", "");
+  setMsg("auditMsg", "");
+  setMsg("pinMsg", "");
   const pinInput = document.getElementById("adminPin");
   if (pinInput instanceof HTMLInputElement) {
     pinInput.value = "";
     pinInput.focus();
   }
+}
+
+function closeOptionsOnSessionExpired() {
+  lockOptions("");
+  window.setTimeout(() => {
+    window.close();
+  }, 0);
 }
 
 async function hasActiveAdminAuth() {
@@ -38,8 +51,7 @@ async function hasActiveAdminAuth() {
 
 async function requireAdminAuth(messageId) {
   if (await hasActiveAdminAuth()) return true;
-  lockOptions(SESSION_EXPIRED_MSG);
-  if (messageId) setMsg(messageId, SESSION_EXPIRED_MSG, true);
+  closeOptionsOnSessionExpired();
   return false;
 }
 
@@ -49,8 +61,7 @@ async function runAdminAction(messageId, action) {
     await action();
   } catch (e) {
     if (isInvalidPinError(e)) {
-      lockOptions(SESSION_EXPIRED_MSG);
-      if (messageId) setMsg(messageId, SESSION_EXPIRED_MSG, true);
+      closeOptionsOnSessionExpired();
       return;
     }
     if (messageId) setMsg(messageId, String(e?.message || e), true);
@@ -89,6 +100,26 @@ function expiryFor(mode) {
   return new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 }
 
+function normalizeChannelInput(rawInput) {
+  const raw = String(rawInput || "").trim();
+  if (!raw) throw new Error("Empty input");
+  if (raw.startsWith("name:")) {
+    throw new Error("Display names are labels only. Use a YouTube URL, @handle, or UC channel ID.");
+  }
+
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (/^youtu\.be\//i.test(raw)) return `https://${raw}`;
+  if (/^youtube\.com\//i.test(raw) || /^www\.youtube\.com\//i.test(raw) || /^m\.youtube\.com\//i.test(raw)) {
+    return `https://${raw}`;
+  }
+  if (/^@[0-9A-Za-z._-]{3,}$/.test(raw)) return raw;
+  if (/^handle:@?[0-9A-Za-z._-]{3,}$/i.test(raw)) return raw;
+  if (/^channelId:UC[0-9A-Za-z_-]{10,}$/i.test(raw)) return raw;
+  if (/^UC[0-9A-Za-z_-]{10,}$/.test(raw)) return `channelId:${raw}`;
+
+  throw new Error("Use a YouTube URL, @handle, or UC channel ID. Display names are not stable allow keys.");
+}
+
 function snapshot(list) {
   return JSON.stringify((list || []).map(normalizeEntry).sort((a, b) => a.key.localeCompare(b.key)));
 }
@@ -123,6 +154,38 @@ async function loadEntries() {
   updateDirty();
 }
 
+async function reloadOptionsState() {
+  if (document.getElementById("adminContent")?.classList.contains("hidden")) return;
+  if (!await hasActiveAdminAuth()) {
+    closeOptionsOnSessionExpired();
+    return;
+  }
+
+  await loadEntries();
+  if (auditExpanded()) await loadAudit();
+}
+
+function scheduleOptionsStateReload() {
+  if (document.hidden) return;
+
+  const now = Date.now();
+  if (now - lastStateReloadAt < STATE_RELOAD_DEBOUNCE_MS) return;
+  lastStateReloadAt = now;
+
+  if (stateReloadInFlight) return;
+  stateReloadInFlight = reloadOptionsState()
+    .catch((e) => {
+      if (isInvalidPinError(e)) {
+        closeOptionsOnSessionExpired();
+        return;
+      }
+      setMsg("wlMsg", String(e?.message || e), true);
+    })
+    .finally(() => {
+      stateReloadInFlight = null;
+    });
+}
+
 async function saveEntries() {
   const resp = await webext.runtimeSendMessage({ type: "whitelist.entries.set", entries, pin: adminPin });
   if (!resp?.ok) throw new Error(resp?.error || "Failed to save whitelist");
@@ -135,28 +198,9 @@ async function saveEntries() {
 }
 
 async function resolveToChannel(input) {
-  const raw = String(input || "").trim();
-  if (!raw) throw new Error("Empty input");
-  if (raw.startsWith("name:")) {
-    throw new Error("Display names are labels only. Use a YouTube URL, @handle, or UC channel ID.");
-  }
-  if (raw.startsWith("@") || raw.startsWith("handle:")) {
-    const key = parseChannelKey(raw);
-    return { key, name: labelForKey(key) };
-  }
-
-  const looksResolvable =
-    /^https?:\/\//i.test(raw) ||
-    /^youtu\.be\//i.test(raw) ||
-    /^channelId:UC[0-9A-Za-z_-]{10,}$/i.test(raw) ||
-    /^UC[0-9A-Za-z_-]{10,}$/.test(raw);
-
-  if (!looksResolvable) {
-    throw new Error("Use a YouTube URL, @handle, or UC channel ID. Display names are not stable allow keys.");
-  }
-
-  const resp = await webext.runtimeSendMessage({ type: "resolve.channel", input: raw.startsWith("youtu.be/") ? `https://${raw}` : raw });
-  if (!resp?.ok || !resp?.channel?.key) throw new Error(`Cannot resolve: ${raw}`);
+  const normalizedInput = normalizeChannelInput(input);
+  const resp = await webext.runtimeSendMessage({ type: "resolve.channel", input: normalizedInput });
+  if (!resp?.ok || !resp?.channel?.key) throw new Error(`Cannot resolve: ${String(input || "").trim()}`);
   return resp.channel;
 }
 
@@ -271,12 +315,9 @@ async function addChannel() {
     if (!key) throw new Error("Invalid channel");
     const existing = entries.find((entry) => entry.key === key);
     if (existing) {
-      existing.name = channel.name || existing.name || labelForKey(key);
-      existing.enabled = true;
-      existing.expiresAt = expiryFor(mode);
-    } else {
-      entries.push({ key, name: channel.name || labelForKey(key), enabled: true, expiresAt: expiryFor(mode) });
+      throw new Error(`Already in whitelist: ${existing.name || labelForKey(key)}`);
     }
+    entries.push({ key, name: channel.name || labelForKey(key), enabled: true, expiresAt: expiryFor(mode) });
     if (input) input.value = "";
     renderEntries();
     updateDirty();
@@ -406,6 +447,9 @@ document.getElementById("adminPin")?.addEventListener("keydown", (e) => {
   e.preventDefault();
   void unlockOptions();
 });
+window.addEventListener("focus", scheduleOptionsStateReload);
+window.addEventListener("pageshow", scheduleOptionsStateReload);
+document.addEventListener("visibilitychange", scheduleOptionsStateReload);
 
 void tryUseAdminSession().then(() => {
   if (document.getElementById("adminContent")?.classList.contains("hidden")) {
