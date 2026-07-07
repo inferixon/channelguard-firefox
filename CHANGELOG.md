@@ -2,12 +2,12 @@
 
 ## 1.0.1 - 2026-07-06
 
-- Fixed YouTube list/show-page video click bypass before playback starts.
-- Improved PIN lockout UI with disabled inputs, countdown, focus handling, and cross-page sync.
-- Made Options channel names open the YouTube channel in a new tab while preserving double-click editing.
-- Added admin session expiry handling after 5 minutes.
+- UI enhancements for Options, popup, and blocked-page admin actions.
+- Added a 120-second PIN lockout after 3 failed attempts.
+- Added admin "Session expired" lockout after 5 minutes.
 - Added runtime whitelist storage migration and normalization for older storage shapes.
 - Added migration coverage for legacy arrays, wrapper objects, map-style storage, malformed storage, and latest-schema idempotence.
+- Small bugfixes for Options, popup, and blocked-page admin actions.
 
 ## 1.0.0 - 2026-07-03
 
