@@ -8,6 +8,8 @@ let adminPin = "";
 let stateReloadInFlight = null;
 let lastStateReloadAt = 0;
 const STATE_RELOAD_DEBOUNCE_MS = 400;
+let pinLockoutTimer = 0;
+let pinLockedUntil = 0;
 
 function setMsg(id, text, isError) {
   const el = document.getElementById(id);
@@ -18,6 +20,45 @@ function setMsg(id, text, isError) {
 
 function isInvalidPinError(error) {
   return String(error?.message || error || "").toLowerCase().includes("invalid pin");
+}
+
+function setUnlockControlsDisabled(disabled) {
+  const pinInput = document.getElementById("adminPin");
+  const unlockButton = document.getElementById("unlockOptions");
+  if (pinInput instanceof HTMLInputElement) pinInput.disabled = disabled;
+  if (unlockButton instanceof HTMLButtonElement) unlockButton.disabled = disabled;
+}
+
+function isPinLocked() {
+  return pinLockedUntil > Date.now();
+}
+
+function stopPinLockout() {
+  if (pinLockoutTimer) window.clearInterval(pinLockoutTimer);
+  pinLockoutTimer = 0;
+  pinLockedUntil = 0;
+  setUnlockControlsDisabled(false);
+}
+
+function updatePinLockoutMessage() {
+  const remainingSeconds = Math.ceil((pinLockedUntil - Date.now()) / 1000);
+  if (remainingSeconds <= 0) {
+    stopPinLockout();
+    setMsg("unlockMsg", "");
+    return;
+  }
+  setMsg("unlockMsg", `Lockout - ${remainingSeconds} seconds remaining.`, true);
+}
+
+function startPinLockout(response) {
+  const remainingSeconds = Number(response?.remainingSeconds || 120);
+  pinLockedUntil = Number(response?.lockedUntil || Date.now() + remainingSeconds * 1000);
+  const pinInput = document.getElementById("adminPin");
+  if (pinInput instanceof HTMLInputElement) pinInput.value = "";
+  setUnlockControlsDisabled(true);
+  updatePinLockoutMessage();
+  if (pinLockoutTimer) window.clearInterval(pinLockoutTimer);
+  pinLockoutTimer = window.setInterval(updatePinLockoutMessage, 1000);
 }
 
 function lockOptions(message) {
@@ -91,6 +132,13 @@ function labelForKey(key) {
   return k;
 }
 
+function channelUrlForKey(key) {
+  const k = parseChannelKey(key || "");
+  if (k.startsWith("handle:")) return `https://www.youtube.com/${k.slice("handle:".length)}`;
+  if (k.startsWith("channelId:")) return `https://www.youtube.com/channel/${k.slice("channelId:".length)}`;
+  return "";
+}
+
 function modeFor(entry) {
   return entry.expiresAt ? "day" : "permanent";
 }
@@ -98,6 +146,20 @@ function modeFor(entry) {
 function expiryFor(mode) {
   if (mode !== "day") return null;
   return new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+}
+
+function isExpired(entry) {
+  const timestamp = Date.parse(entry?.expiresAt || "");
+  return Number.isFinite(timestamp) && timestamp <= Date.now();
+}
+
+function normalizeExpiredEntryState(entry) {
+  if (!isExpired(entry)) return entry;
+  return { ...entry, enabled: false };
+}
+
+function hasExpiredEnabledEntries(list) {
+  return (list || []).some((entry) => isExpired(entry) && entry.enabled !== false);
 }
 
 function normalizeChannelInput(rawInput) {
@@ -112,8 +174,8 @@ function normalizeChannelInput(rawInput) {
   if (/^youtube\.com\//i.test(raw) || /^www\.youtube\.com\//i.test(raw) || /^m\.youtube\.com\//i.test(raw)) {
     return `https://${raw}`;
   }
-  if (/^@[0-9A-Za-z._-]{3,}$/.test(raw)) return raw;
-  if (/^handle:@?[0-9A-Za-z._-]{3,}$/i.test(raw)) return raw;
+  if (/^@[^/?#\s]{3,}$/.test(raw)) return raw;
+  if (/^handle:@?[^/?#\s]{3,}$/i.test(raw)) return raw;
   if (/^channelId:UC[0-9A-Za-z_-]{10,}$/i.test(raw)) return raw;
   if (/^UC[0-9A-Za-z_-]{10,}$/.test(raw)) return `channelId:${raw}`;
 
@@ -147,11 +209,25 @@ async function setAuditExpanded(expanded) {
 async function loadEntries() {
   const resp = await webext.runtimeSendMessage({ type: "whitelist.entries.get", pin: adminPin });
   if (!resp?.ok) throw new Error(resp?.error || "Failed to load whitelist");
-  entries = (resp.entries || []).map(normalizeEntry);
+  const loaded = (resp.entries || []).map(normalizeEntry);
+  const shouldPersistExpiredState = hasExpiredEnabledEntries(loaded);
+  entries = loaded.map(normalizeExpiredEntryState);
+  if (shouldPersistExpiredState) {
+    const saveResp = await webext.runtimeSendMessage({ type: "whitelist.entries.set", entries, pin: adminPin });
+    if (!saveResp?.ok) throw new Error(saveResp?.error || "Failed to update expired whitelist entries");
+    entries = (saveResp.entries || []).map(normalizeEntry).map(normalizeExpiredEntryState);
+  }
   savedSnapshot = snapshot(entries);
   document.getElementById("version").textContent = resp.version || extensionVersion() || "-";
   renderEntries();
   updateDirty();
+}
+
+async function refreshDefaultPinHint() {
+  const el = document.getElementById("defaultPinHint");
+  if (!el) return;
+  const resp = await webext.runtimeSendMessage({ type: "pin.default.get" });
+  el.classList.toggle("hidden", !(resp?.ok && resp.defaultPinActive));
 }
 
 async function reloadOptionsState() {
@@ -162,6 +238,7 @@ async function reloadOptionsState() {
   }
 
   await loadEntries();
+  await refreshDefaultPinHint();
   if (auditExpanded()) await loadAudit();
 }
 
@@ -248,6 +325,7 @@ function renderEntries() {
   tbody.textContent = "";
 
   for (const entry of entries) {
+    const expired = isExpired(entry);
     const tr = document.createElement("tr");
 
     const enabled = cell("");
@@ -262,8 +340,24 @@ function renderEntries() {
     enabled.appendChild(checkbox);
     tr.appendChild(enabled);
 
-    const nameTd = cell(entry.name || labelForKey(entry.key), "editable");
-    nameTd.addEventListener("dblclick", () => editCell(nameTd, entry.name, (value) => { entry.name = String(value || "").trim() || labelForKey(entry.key); }));
+    const nameTd = cell("", "editable");
+    const channelUrl = channelUrlForKey(entry.key);
+    const channelName = entry.name || labelForKey(entry.key);
+    if (channelUrl) {
+      const link = document.createElement("a");
+      link.href = channelUrl;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = channelName;
+      nameTd.appendChild(link);
+    } else {
+      nameTd.textContent = channelName;
+    }
+    nameTd.addEventListener("dblclick", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      editCell(nameTd, entry.name, (value) => { entry.name = String(value || "").trim() || labelForKey(entry.key); });
+    });
     tr.appendChild(nameTd);
 
     const keyTd = cell(entry.key, "editable mono");
@@ -287,7 +381,7 @@ function renderEntries() {
     modeTd.appendChild(select);
     tr.appendChild(modeTd);
 
-    tr.appendChild(cell(entry.expiresAt ? new Date(entry.expiresAt).toLocaleString() : "-", "muted"));
+    tr.appendChild(cell(expired ? "Expired" : (entry.expiresAt ? new Date(entry.expiresAt).toLocaleString() : "-"), "muted"));
 
     const delTd = cell("", "col-delete");
     const del = document.createElement("button");
@@ -376,21 +470,33 @@ async function unlockOptions() {
     setMsg("unlockMsg", "Enter PIN.", true);
     return;
   }
+  if (isPinLocked()) {
+    updatePinLockoutMessage();
+    return;
+  }
   const btn = document.getElementById("unlockOptions");
   if (btn) btn.disabled = true;
   try {
     const resp = await webext.runtimeSendMessage({ type: "pin.verify", pin });
+    if (resp?.locked) {
+      startPinLockout(resp);
+      return;
+    }
     if (!resp?.ok) throw new Error(resp?.error || "invalid pin");
+    stopPinLockout();
     adminPin = pin;
     document.getElementById("unlockSection")?.classList.add("hidden");
     document.getElementById("adminContent")?.classList.remove("hidden");
     setMsg("unlockMsg", "");
     await loadEntries();
+    await refreshDefaultPinHint();
   } catch {
     adminPin = "";
+    const pinInput = document.getElementById("adminPin");
+    if (pinInput instanceof HTMLInputElement) pinInput.value = "";
     setMsg("unlockMsg", "Invalid PIN.", true);
   } finally {
-    if (btn) btn.disabled = false;
+    if (btn && !isPinLocked()) btn.disabled = false;
   }
 }
 
@@ -401,6 +507,7 @@ async function tryUseAdminSession() {
     document.getElementById("unlockSection")?.classList.add("hidden");
     document.getElementById("adminContent")?.classList.remove("hidden");
     await loadEntries();
+    await refreshDefaultPinHint();
   } catch {
     lockOptions("");
   }
@@ -431,6 +538,7 @@ document.getElementById("savePin")?.addEventListener("click", async () => {
     setMsg("pinMsg", "PIN updated.");
     const inp = document.getElementById("newPin");
     if (inp) inp.value = "";
+    await refreshDefaultPinHint();
   });
 });
 document.getElementById("newPin")?.addEventListener("keydown", (e) => {
@@ -446,6 +554,11 @@ document.getElementById("adminPin")?.addEventListener("keydown", (e) => {
   if (e.key !== "Enter") return;
   e.preventDefault();
   void unlockOptions();
+});
+chrome.runtime.onMessage.addListener((message) => {
+  if (message?.type === "pin.lockout.changed" && message.locked) {
+    startPinLockout(message);
+  }
 });
 window.addEventListener("focus", scheduleOptionsStateReload);
 window.addEventListener("pageshow", scheduleOptionsStateReload);

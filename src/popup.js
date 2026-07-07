@@ -4,6 +4,8 @@
 
 let unlockedPin = "";
 let activeContext = null;
+let pinLockoutTimer = 0;
+let pinLockedUntil = 0;
 
 async function getActiveTab() {
   const tabs = await webext.tabsQuery({ active: true, currentWindow: true });
@@ -45,10 +47,92 @@ function focusPin() {
   }, 0);
 }
 
+function clearPin() {
+  const pinInput = document.getElementById("pin");
+  if (pinInput instanceof HTMLInputElement) pinInput.value = "";
+}
+
+function isFocusableButton(id) {
+  const button = document.getElementById(id);
+  return button instanceof HTMLButtonElement && !button.disabled && !button.classList.contains("hidden");
+}
+
+function focusButton(id) {
+  const button = document.getElementById(id);
+  if (!(button instanceof HTMLButtonElement)) return;
+  window.setTimeout(() => button.focus(), 0);
+}
+
+function focusPrimaryAction() {
+  if (isFocusableButton("addChannel")) {
+    focusButton("addChannel");
+    return;
+  }
+  if (isFocusableButton("enableForever")) {
+    focusButton("enableForever");
+    return;
+  }
+  focusButton("openOptions");
+}
+
+function setPinControlsDisabled(disabled) {
+  const pinInput = document.getElementById("pin");
+  const unlockButton = document.getElementById("unlock");
+  if (pinInput instanceof HTMLInputElement) pinInput.disabled = disabled;
+  if (unlockButton instanceof HTMLButtonElement) unlockButton.disabled = disabled;
+}
+
+function isPinLocked() {
+  return pinLockedUntil > Date.now();
+}
+
+function stopPinLockout() {
+  if (pinLockoutTimer) window.clearInterval(pinLockoutTimer);
+  pinLockoutTimer = 0;
+  pinLockedUntil = 0;
+  setPinControlsDisabled(false);
+}
+
+function updatePinLockoutMessage() {
+  const remainingSeconds = Math.ceil((pinLockedUntil - Date.now()) / 1000);
+  if (remainingSeconds <= 0) {
+    stopPinLockout();
+    setMsg("");
+    focusPin();
+    return;
+  }
+  setMsg(`Lockout - ${remainingSeconds} seconds remaining.`, true);
+}
+
+function startPinLockout(response) {
+  const remainingSeconds = Number(response?.remainingSeconds || 120);
+  pinLockedUntil = Number(response?.lockedUntil || Date.now() + remainingSeconds * 1000);
+  unlockedPin = "";
+  clearPin();
+  showPin();
+  setPinControlsDisabled(true);
+  updatePinLockoutMessage();
+  if (pinLockoutTimer) window.clearInterval(pinLockoutTimer);
+  pinLockoutTimer = window.setInterval(updatePinLockoutMessage, 1000);
+}
+
+async function refreshPinLockout() {
+  try {
+    const resp = await webext.runtimeSendMessage({ type: "pin.lockout.get" });
+    if (resp?.ok && resp.locked) {
+      startPinLockout(resp);
+      return true;
+    }
+  } catch {
+    // Best-effort startup state only.
+  }
+  return false;
+}
+
 function showPin() {
   document.getElementById("stepActions")?.classList.add("hidden");
   document.getElementById("stepPin")?.classList.remove("hidden");
-  focusPin();
+  if (!isPinLocked()) focusPin();
 }
 
 async function unlock() {
@@ -59,21 +143,33 @@ async function unlock() {
     return;
   }
 
+  if (isPinLocked()) {
+    updatePinLockoutMessage();
+    return;
+  }
+
   const btn = document.getElementById("unlock");
   if (btn) btn.disabled = true;
   try {
     const resp = await webext.runtimeSendMessage({ type: "pin.verify", pin });
+    if (resp?.locked) {
+      startPinLockout(resp);
+      return;
+    }
     if (!resp?.ok) throw new Error(resp?.error || "invalid pin");
+    stopPinLockout();
     unlockedPin = pin;
     await refreshDefaultPinHint();
     showActions();
     await refreshActionState();
+    focusPrimaryAction();
   } catch (e) {
     unlockedPin = "";
+    clearPin();
     showPin();
     setMsg("Invalid PIN.", true);
   } finally {
-    if (btn) btn.disabled = false;
+    if (btn && !isPinLocked()) btn.disabled = false;
   }
 }
 
@@ -336,6 +432,11 @@ document.getElementById("pin")?.addEventListener("keydown", (e) => {
   if (e.key === "Enter") void unlock();
 });
 document.getElementById("unlock")?.addEventListener("click", () => void unlock());
+chrome.runtime.onMessage.addListener((message) => {
+  if (message?.type === "pin.lockout.changed" && message.locked) {
+    startPinLockout(message);
+  }
+});
 
 async function init() {
   const tab = await getActiveTab();
@@ -345,10 +446,13 @@ async function init() {
   }
   showPin();
   await refreshDefaultPinHint();
+  const locked = await refreshPinLockout();
   showPopup();
+  if (!locked) focusPin();
 }
 
 void init().catch(() => {
   showPin();
   showPopup();
+  focusPin();
 });

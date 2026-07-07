@@ -223,7 +223,30 @@ async function verifyPin(pin) {
 
 function pinLockoutError() {
   const remainingSeconds = Math.max(1, Math.ceil((pinLockedUntil - Date.now()) / 1000));
-  return new Error(`Too many failed PIN attempts. Try again in ${remainingSeconds} seconds.`);
+  const error = new Error(`Too many failed PIN attempts. Try again in ${remainingSeconds} seconds.`);
+  error.code = "pin_lockout";
+  error.lockedUntil = pinLockedUntil;
+  error.remainingSeconds = remainingSeconds;
+  return error;
+}
+
+function pinLockoutState() {
+  if (pinLockedUntil <= Date.now()) {
+    return { locked: false, lockedUntil: 0, remainingSeconds: 0 };
+  }
+  return {
+    locked: true,
+    lockedUntil: pinLockedUntil,
+    remainingSeconds: Math.max(1, Math.ceil((pinLockedUntil - Date.now()) / 1000))
+  };
+}
+
+function broadcastPinLockoutState() {
+  try {
+    chrome.runtime.sendMessage({ type: "pin.lockout.changed", ...pinLockoutState() });
+  } catch {
+    // Best-effort UI sync only.
+  }
 }
 
 async function verifyPinWithLockout(pin) {
@@ -242,6 +265,7 @@ async function verifyPinWithLockout(pin) {
   if (pinFailedAttempts >= PIN_MAX_FAILED_ATTEMPTS) {
     pinFailedAttempts = 0;
     pinLockedUntil = Date.now() + PIN_LOCKOUT_MS;
+    broadcastPinLockoutState();
     throw pinLockoutError();
   }
 
@@ -336,6 +360,26 @@ async function normalizeStoredWhitelistIfNeeded() {
 
 function handleFromHtml(htmlText) {
   const html = String(htmlText || "");
+  const candidates = [
+    /"canonicalBaseUrl"\s*:\s*"((?:\\\/|\/)@[^"]+)"/,
+    /<link[^>]+rel="canonical"[^>]+href="(https:\/\/www\.youtube\.com\/@[^"]+)"/i,
+    /<meta[^>]+property="og:url"[^>]+content="(https:\/\/www\.youtube\.com\/@[^"]+)"/i,
+    /"ownerProfileUrl"\s*:\s*"(https?:\\\/\\\/www\\\.youtube\\\.com\\\/@[^"]+)"/,
+    /"ownerProfileUrl"\s*:\s*"((?:\\\/|\/)@[^"]+)"/,
+    /(https:\/\/www\.youtube\.com\/@[^\s"'<>\\]+)/,
+    /href="((?:\\\/|\/)@[^\s"'<>\\]+)"/,
+    /(\\\/@[^\s"'<>\\]+)/
+  ];
+
+  for (const pattern of candidates) {
+    const m = html.match(pattern);
+    if (!m) continue;
+    const candidate = String(m[1] || "")
+      .replace(/\\\//g, "/")
+      .replace(/\\u0026/g, "&");
+    const key = parseChannelKey(candidate);
+    if (key.startsWith("handle:")) return key.slice("handle:".length);
+  }
 
   // Common patterns:
   // - "canonicalBaseUrl":"/@handle"
@@ -522,11 +566,13 @@ async function resolveChannelFromInput(input) {
   let urlToFetch = "";
   try {
     const url = new URL(raw);
+    const webUrl = url.protocol === "http:" || url.protocol === "https:";
     const hostOk =
       url.hostname === "youtu.be" ||
       /(^|\.)youtube\.com$/.test(url.hostname) ||
       /(^|\.)youtube-nocookie\.com$/.test(url.hostname);
-    if (hostOk) urlToFetch = toYouTubeWatchUrl(url.toString());
+    if (webUrl && hostOk) urlToFetch = toYouTubeWatchUrl(url.toString());
+    else if (!webUrl) urlToFetch = toYouTubeChannelUrlFromStableKey(fallbackKey);
   } catch {
     urlToFetch = toYouTubeChannelUrlFromStableKey(fallbackKey);
   }
@@ -782,7 +828,22 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     }
 
     if (message.type === "pin.verify") {
-      const ok = await verifyPinWithLockout(message.pin);
+      let ok = false;
+      try {
+        ok = await verifyPinWithLockout(message.pin);
+      } catch (err) {
+        if (err?.code === "pin_lockout") {
+          sendResponse({
+            ok: false,
+            error: "pin lockout",
+            locked: true,
+            lockedUntil: err.lockedUntil,
+            remainingSeconds: err.remainingSeconds
+          });
+          return;
+        }
+        throw err;
+      }
       if (!ok) {
         sendResponse({ ok: false, error: "invalid pin" });
         return;
@@ -795,6 +856,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message.type === "pin.default.get") {
       const defaultPinActive = await isDefaultPinActive();
       sendResponse({ ok: true, defaultPinActive });
+      return;
+    }
+
+    if (message.type === "pin.lockout.get") {
+      sendResponse({ ok: true, ...pinLockoutState() });
       return;
     }
 

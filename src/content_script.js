@@ -11,6 +11,7 @@ let retryExpectedVideoId = "";
 let retryObserver = null;
 let miniPlayerTimer = null;
 let miniPlayerObserver = null;
+let clickCheckInFlight = false;
 
 const RETRY_MAX_ATTEMPTS = 12;
 const RETRY_BASE_DELAY_MS = 140;
@@ -28,6 +29,21 @@ async function sendMiniPlayerCheck(url) {
   if (!signature || signature === lastMiniPlayerSignature) return null;
   lastMiniPlayerSignature = signature;
   return webext.runtimeSendMessage({ type: "youtube.check", url, channelKey: "", channelName: "", source: "content-script-miniplayer" });
+}
+
+async function sendClickCheck(url) {
+  return webext.runtimeSendMessage({ type: "youtube.check", url, channelKey: "", channelName: "", source: "content-script-click" });
+}
+
+function blockedUrlForClick(videoUrl, reason = "channel-unresolved") {
+  const base = chrome.runtime.getURL("src/blocked.html");
+  const qs = new URLSearchParams({
+    url: videoUrl || "",
+    channelKey: "",
+    channelName: "",
+    reason
+  });
+  return `${base}?${qs.toString()}`;
 }
 
 function clearPendingRetryTimer() {
@@ -98,6 +114,49 @@ function watchUrlFromVideoId(videoId) {
   const id = String(videoId || "").trim();
   if (!id) return "";
   return `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
+}
+
+function videoUrlFromLinkClick(event) {
+  if (event.defaultPrevented) return "";
+  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return "";
+
+  const target = event.target;
+  const link = target?.closest?.("a[href]");
+  if (!link) return "";
+
+  try {
+    const url = new URL(link.getAttribute("href") || "", window.location.href);
+    if (!isYouTubeVideoUrl(url.toString())) return "";
+    return url.toString();
+  } catch {
+    return "";
+  }
+}
+
+async function handleVideoLinkClick(event) {
+  const url = videoUrlFromLinkClick(event);
+  if (!url || clickCheckInFlight) return;
+
+  clickCheckInFlight = true;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+
+  try {
+    const resp = await sendClickCheck(url);
+    if (resp?.redirectUrl) {
+      window.location.assign(String(resp.redirectUrl));
+      return;
+    }
+    if (resp?.ok && resp.allowed) {
+      window.location.assign(url);
+      return;
+    }
+    window.location.assign(blockedUrlForClick(url, resp?.reason || "channel-unresolved"));
+  } catch {
+    window.location.assign(blockedUrlForClick(url, "channel-check-failed"));
+  } finally {
+    clickCheckInFlight = false;
+  }
 }
 
 function isElementVisible(el) {
@@ -340,6 +399,9 @@ function ensureMiniPlayerObserver() {
 }
 
 // YouTube is an SPA; listen to navigation events.
+document.addEventListener("click", (event) => {
+  void handleVideoLinkClick(event);
+}, true);
 window.addEventListener("yt-navigate-finish", onUrlChange, true);
 window.addEventListener("popstate", onUrlChange, true);
 window.addEventListener("hashchange", onUrlChange, true);

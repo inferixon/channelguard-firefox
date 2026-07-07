@@ -6,11 +6,47 @@ function normalizeWhitespace(text) {
     .trim();
 }
 
+function safeDecodeURIComponent(text) {
+  try {
+    return decodeURIComponent(String(text || ""));
+  } catch {
+    return String(text || "");
+  }
+}
+
 function normalizeHandle(handle) {
   const h = normalizeWhitespace(handle);
   if (!h) return "";
   const raw = h.startsWith("@") ? h.slice(1) : h;
-  return `@${raw.toLowerCase()}`;
+  return `@${safeDecodeURIComponent(raw).toLowerCase()}`;
+}
+
+function parseYouTubeChannelPath(input) {
+  const raw = String(input || "").trim();
+  if (!raw) return "";
+
+  let path = "";
+  try {
+    const url = new URL(raw, "https://www.youtube.com");
+    const hostOk =
+      url.hostname === "youtu.be" ||
+      /(^|\.)youtube\.com$/.test(url.hostname) ||
+      /(^|\.)youtube-nocookie\.com$/.test(url.hostname);
+    if (!hostOk) return "";
+    path = url.pathname || "";
+  } catch {
+    path = raw;
+  }
+
+  const mChannel = path.match(/\/channel\/(UC[0-9A-Za-z_-]{10,})/);
+  if (mChannel) return `channelId:${mChannel[1]}`;
+
+  const mHandle = path.match(/\/(@[^/?#]+)/);
+  if (mHandle) return `handle:${normalizeHandle(mHandle[1])}`;
+
+  if (/^@[^/?#]+$/.test(raw)) return `handle:${normalizeHandle(raw)}`;
+
+  return "";
 }
 
 function parseChannelKey(input) {
@@ -32,11 +68,8 @@ function parseChannelKey(input) {
   // - https://www.youtube.com/channel/UC....
   // - https://www.youtube.com/@handle
   // - /@handle
-  const mId = raw.match(/(?:youtube\.com\/channel\/)(UC[0-9A-Za-z_-]{10,})/);
-  if (mId) return `channelId:${mId[1]}`;
-
-  const mHandle = raw.match(/(?:youtube\.com\/|^\/)?(@[0-9A-Za-z._-]{3,})/);
-  if (mHandle) return `handle:${normalizeHandle(mHandle[1])}`;
+  const channelPathKey = parseYouTubeChannelPath(raw);
+  if (channelPathKey) return channelPathKey;
 
   // Fallback: treat as channel display name.
   return `name:${raw.toLowerCase()}`;

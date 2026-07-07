@@ -39,6 +39,8 @@
       th { font-size: 12px; color: #555; font-weight: 600; }
       td.editable { cursor: text; }
       td.editing { padding: 4px; }
+      td.editable a { color: #0645ad; text-decoration: none; }
+      td.editable a:hover, td.editable a:focus-visible { font-weight: 700; text-decoration: none; }
       .col-enabled { width: 74px; }
       .col-mode { width: 148px; }
       .col-until { width: 190px; }
@@ -123,7 +125,7 @@
           <button id="savePin" class="btn-work">Save PIN</button>
         </div>
         <div id="pinMsg" class="msg"></div>
-        <div class="muted hint">Default PIN on first install: <b>0000</b></div>
+        <div id="defaultPinHint" class="muted hint">Default PIN on first install: <b>0000</b></div>
       </section>
 
       <section>
