@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.2 - 2026-07-14
+
+- Renamed the public add-on to Inferfox ChannelGuard.
+- Updated the popup, Options, blocked page, and exported policy filename for the Inferfox brand.
+
 ## 1.0.1 - 2026-07-06
 
 - UI enhancements for Options, popup, and blocked-page admin actions.

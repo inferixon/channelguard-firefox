@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Inferfox ChannelGuard",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Allow YouTube videos only from parent-approved channels.",
   "permissions": [
     "storage",
