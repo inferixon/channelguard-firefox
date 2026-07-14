@@ -334,7 +334,12 @@ function renderEntries() {
     checkbox.type = "checkbox";
     checkbox.checked = entry.enabled !== false;
     checkbox.addEventListener("change", () => {
+      const renewExpiredDayApproval = checkbox.checked && isExpired(entry) && Boolean(entry.expiresAt);
       entry.enabled = checkbox.checked;
+      if (renewExpiredDayApproval) {
+        entry.expiresAt = expiryFor("day");
+        renderEntries();
+      }
       updateDirty();
     });
     enabled.appendChild(checkbox);

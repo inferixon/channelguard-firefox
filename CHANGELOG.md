@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.0.3 - 2026-07-14
+- Fixed expired one-day approvals being re-enabled without renewal.
+
 ## 1.0.2 - 2026-07-14
 
 - Renamed the public add-on to Inferfox ChannelGuard.
