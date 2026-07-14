@@ -233,7 +233,7 @@ function suppressMiniplayer(root) {
       // Best effort only.
     }
   }
-  root.setAttribute("data-channelguard-blocked", "true");
+  root.setAttribute("data-inferfox-channelguard-blocked", "true");
   root.style.display = "none";
 }
 

@@ -11,7 +11,7 @@
 
 ## 1.0.0 - 2026-07-03
 
-- Released ChannelGuard as a public Firefox add-on.
+- Released Inferfox ChannelGuard as a public Firefox add-on.
 
 ## 0.1.4 - 2026-07-02
 

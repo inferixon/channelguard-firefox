@@ -1,6 +1,6 @@
 {
   "manifest_version": 2,
-  "name": "ChannelGuard",
+  "name": "Inferfox ChannelGuard",
   "version": "1.0.1",
   "description": "Allow YouTube videos only from parent-approved channels.",
   "permissions": [
@@ -32,7 +32,7 @@
     "open_in_tab": true
   },
   "browser_action": {
-    "default_title": "ChannelGuard",
+    "default_title": "Inferfox ChannelGuard",
     "default_popup": "src/popup.html",
     "default_icon": {
       "48": "assets/icon-48.png",

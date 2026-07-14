@@ -1,14 +1,14 @@
-# ChannelGuard
+# Inferfox ChannelGuard
 
-ChannelGuard helps parents keep YouTube limited to trusted channels in desktop Firefox.
+Inferfox ChannelGuard helps parents keep YouTube limited to trusted channels in desktop Firefox.
 
-YouTube can quickly lead children from one safe video to unrelated recommendations, shorts, or channels that parents did not choose. ChannelGuard blocks YouTube video pages by default in desktop Firefox and lets a parent approve trusted channels with a PIN.
+YouTube can quickly lead children from one safe video to unrelated recommendations, shorts, or channels that parents did not choose. Inferfox ChannelGuard blocks YouTube video pages by default in desktop Firefox and lets a parent approve trusted channels with a PIN.
 
 It is designed for household use: a parent approves a channel permanently or for one day, and manages the whitelist in Firefox.
 
 Current support target: desktop Firefox 142 or newer.
 
-ChannelGuard is independent and is not affiliated with YouTube or Google.
+Inferfox ChannelGuard is independent and is not affiliated with YouTube or Google.
 
 ## Features
 
@@ -38,24 +38,24 @@ Change it in Options after testing begins.
 ## Usage
 
 - Open a YouTube video or channel page.
-- Click the ChannelGuard toolbar button and enter the PIN.
+- Click the Inferfox ChannelGuard toolbar button and enter the PIN.
 - Use default PIN `0000` on first install, then change it in Options.
 - Approve the channel forever or for one day.
 - Manage channels, backup JSON, PIN, and audit entries from Options.
 
 ## Data Handling
 
-ChannelGuard stores whitelist entries, PIN verification data, and local audit entries only in Firefox extension storage on the user's device.
+Inferfox ChannelGuard stores whitelist entries, PIN verification data, and local audit entries only in Firefox extension storage on the user's device.
 
 It does not send data to the developer and does not use telemetry, analytics, accounts, cloud sync, tracking, or remote policy services.
 
-To resolve the channel for the YouTube page being evaluated, ChannelGuard may request YouTube oEmbed, channel, or video pages. This data is sent only to YouTube/Google as part of enforcing the local policy.
+To resolve the channel for the YouTube page being evaluated, Inferfox ChannelGuard may request YouTube oEmbed, channel, or video pages. This data is sent only to YouTube/Google as part of enforcing the local policy.
 
 See [PRIVACY.md](PRIVACY.md).
 
 ## Limitations
 
-ChannelGuard is a browser-level household tool. It is not a device-level parental-control system.
+Inferfox ChannelGuard is a browser-level household tool. It is not a device-level parental-control system.
 
 A user who can disable extensions, use another browser or Firefox profile, change Firefox settings, or modify local profile data can bypass it.
 
@@ -63,7 +63,7 @@ For child devices, use Firefox Enterprise Policies or OS-level parental controls
 
 ## Storage Migrations
 
-ChannelGuard keeps user policy data in `browser.storage.local` under the `ytWhitelist.*` keys. Public updates must preserve existing whitelist, PIN hash, PIN salt, and audit data.
+Inferfox ChannelGuard keeps user policy data in `browser.storage.local` under the `ytWhitelist.*` keys. Public updates must preserve existing whitelist, PIN hash, PIN salt, and audit data.
 
 The runtime migration point is `src/background.js -> migrateWhitelistStorageSnapshot()`. Any future storage-shape change must update that normalizer and add a fixture to `tests/storage_migration.test.js`.
 

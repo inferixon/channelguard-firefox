@@ -428,7 +428,7 @@ async function exportPolicy() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `channelguard-whitelist-${new Date().toISOString().slice(0, 10)}.json`;
+  a.download = `inferfox-channelguard-whitelist-${new Date().toISOString().slice(0, 10)}.json`;
   a.click();
   URL.revokeObjectURL(url);
   setMsg("backupMsg", "Exported whitelist JSON.");

@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for improving ChannelGuard.
+Thanks for improving Inferfox ChannelGuard.
 
 ## Scope
 

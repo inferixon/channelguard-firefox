@@ -145,7 +145,7 @@ function renderDetails() {
 
 function approvalRequestText() {
   return [
-    "ChannelGuard approval request",
+    "Inferfox ChannelGuard approval request",
     `URL: ${originalUrl || "(unknown)"}`,
     `Channel: ${channelName || "(unknown)"}`,
     `Channel key: ${channelKey || "(unresolved)"}`,
